@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Studio — Sổ Gọi Cảnh</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/app.css">
+  <style>a[data-studio-link] { text-decoration: none; }</style>
+</head>
+<body>
+  <!-- Header chung -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="header-brand">
+        <span class="brand-icon">🎬</span>
+        <h1 class="brand-title">Video Studio</h1>
+      </div>
+      <nav class="desktop-nav" id="desktop-nav" style="display: none;">
+        <a class="desk-nav-btn active" id="desk-btn-list" href="/studio" data-studio-link>📋 Nhật ký</a>
+        <a class="desk-nav-btn" id="desk-btn-create" href="/studio/new" data-studio-link>➕ Tạo video mới</a>
+        <a class="desk-nav-btn" href="/studio/system" data-studio-link>Hệ thống</a>
+      </nav>
+    </div>
+    <div class="header-status" id="runner-status">
+      <span class="status-dot offline" id="runner-dot"></span>
+      <span class="status-label" id="runner-label">Đang kiểm tra...</span>
+    </div>
+    <div class="header-user" id="user-section" style="display: none;">
+      <span class="user-name" id="user-display"></span>
+      <button class="btn-text" id="btn-logout" type="button">Thoát</button>
+    </div>
+  </header>
+
+  <!-- Màn hình Đăng nhập -->
+  <main id="view-session" class="view-container" aria-live="polite">
+    <div class="card login-card">
+      <h2 class="section-title">Kết nối Studio</h2>
+      <p id="session-message">Đang kiểm tra phiên đăng nhập…</p>
+      <button id="btn-session-retry" class="btn btn-primary" type="button" style="display: none;">Thử lại</button>
+    </div>
+  </main>
+  <main id="view-login" class="view-container" style="display: none;">
+    <div class="card login-card">
+      <div class="login-header">
+        <h2 class="section-title">Đăng nhập Studio</h2>
+        <p class="section-subtitle">Dành riêng cho chủ hệ thống và người cộng tác</p>
+      </div>
+      <form id="form-login" novalidate>
+        <div class="form-group">
+          <label for="login-username">Tên tài khoản</label>
+          <input type="text" id="login-username" name="username" autocomplete="username" placeholder="owner hoặc collaborator" required>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Mật khẩu</label>
+          <input type="password" id="login-password" name="password" autocomplete="current-password" placeholder="••••••••" required>
+        </div>
+        <div class="alert alert-error" id="login-error" style="display: none;"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="btn-submit-login">Đăng nhập</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- Màn hình Danh sách Video -->
+  <main id="view-list" class="view-container" style="display: none;">
+    <div class="view-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <div class="view-title-group">
+        <h2 class="view-title">Nhật ký cảnh quay</h2>
+        <p class="view-subtitle">Theo dõi tiến độ từ kịch bản đến video hoàn thiện</p>
+      </div>
+      <a class="btn btn-primary" id="btn-create-top" href="/studio/new" data-studio-link style="padding: 10px 18px; font-size: 14px; white-space: nowrap;">➕ Tạo video mới</a>
+    </div>
+
+    <!-- Zalo notifications are delivered privately by the local watcher -->
+    <div class="zalo-banner" style="background: rgba(0, 104, 255, 0.08); border: 1px solid rgba(0, 104, 255, 0.25); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; font-size: 13px; gap: 8px;">
+      <span style="font-size: 16px;">🔔</span>
+      <span><b>Thông báo Zalo:</b> Bot đã liên kết với tài khoản của bạn và nhắn riêng khi máy trực ban đang chạy. Không cần thêm bot vào nhóm, trừ khi bạn muốn cả nhóm cùng nhận tin.</span>
+    </div>
+
+    <!-- Filter chips -->
+    <div class="filter-bar" id="filter-bar">
+      <a class="chip active" data-filter="all" href="/studio?status=all" data-studio-link>Tất cả</a>
+      <a class="chip" data-filter="waiting" href="/studio?status=waiting" data-studio-link>Đang chờ</a>
+      <a class="chip" data-filter="producing" href="/studio?status=producing" data-studio-link>Đang dựng</a>
+      <a class="chip" data-filter="review" href="/studio?status=review" data-studio-link>Cần duyệt</a>
+      <a class="chip" data-filter="sent" href="/studio?status=sent" data-studio-link>Đã đăng</a>
+    </div>
+
+    <!-- Danh sách thẻ video -->
+    <div class="requests-list" id="requests-container">
+      <div class="loading-spinner">Đang tải danh sách...</div>
+    </div>
+  </main>
+
+  <!-- Màn hình Tạo Video Mới -->
+  <main id="view-create" class="view-container" style="display: none;">
+    <div class="view-header">
+      <div class="view-title-group">
+        <h2 class="view-title">Lập kịch bản mới</h2>
+        <p class="view-subtitle">Nhập thông tin cảnh quay để xếp hàng sản xuất</p>
+      </div>
+    </div>
+
+    <form id="form-create-request" class="card form-card">
+      <div id="create-draft-banner" class="draft-banner" style="display: none;">
+        <span id="create-draft-message">Bạn có bản nháp chưa gửi.</span>
+        <div class="draft-actions">
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-draft-restore">Khôi phục</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-draft-discard">Xóa nháp</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="label-row">
+          <label for="req-title">Tiêu đề cảnh quay <span class="req-star">*</span></label>
+          <span class="char-count" id="count-title">0/160</span>
+        </div>
+        <input type="text" id="req-title" maxlength="160" placeholder="VD: 5 bài học cuộc sống đáng giá triệu đô..." required>
+      </div>
+
+      <div class="form-group">
+        <div class="label-row">
+          <label for="req-script">Kịch bản lời dẫn (Voice narration) <span class="req-star">*</span></label>
+          <span class="char-count" id="count-script">0/30000</span>
+        </div>
+        <textarea id="req-script" rows="8" maxlength="30000" placeholder="Nhập nội dung lời thoại chi tiết cho từng phân cảnh..." required></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Chọn phong cách dựng <span class="req-star">*</span></label>
+        <div class="skill-options">
+          <label class="skill-card selected" id="skill-card-story">
+            <input type="radio" name="skill" value="viet-tiktok-story-video" checked>
+            <div class="skill-content">
+              <strong class="skill-title">Kể chuyện TikTok (9:16)</strong>
+              <p class="skill-desc">Video minh họa sinh động, lời dẫn triết lý cảm xúc hoặc hài hước ngắn.</p>
+            </div>
+          </label>
+          <label class="skill-card" id="skill-card-drama">
+            <input type="radio" name="skill" value="drama-mascot-video">
+            <div class="skill-content">
+              <strong class="skill-title">Linh vật Drama / Mascot</strong>
+              <p class="skill-desc">Bé Simi bình luận tin tức, bảo vệ cộng đồng, biểu cảm hoạt hình cuốn hút.</p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>AI thực hiện <span class="req-star">*</span></label>
+        <div class="skill-options">
+          <label class="skill-card selected" id="agent-card-codex">
+            <input type="radio" name="agentProvider" value="codex" checked>
+            <div class="skill-content">
+              <strong class="skill-title">Codex (OpenAI)</strong>
+              <p class="skill-desc">Giao việc cho Codex CLI trên máy đang chạy Video Studio.</p>
+            </div>
+          </label>
+          <label class="skill-card" id="agent-card-antigravity">
+            <input type="radio" name="agentProvider" value="antigravity">
+            <div class="skill-content">
+              <strong class="skill-title">Antigravity (Google)</strong>
+              <p class="skill-desc">Giao việc cho Antigravity CLI đã đăng nhập trên máy.</p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Tùy chọn nâng cao -->
+      <details class="accordion-options">
+        <summary class="accordion-summary">Tùy chọn đạo diễn (Giọng đọc & Tham chiếu)</summary>
+        <div class="accordion-body">
+          <div class="form-group">
+            <label for="req-voice">Hồ sơ giọng đọc</label>
+            <input type="text" id="req-voice" placeholder="Mặc định: VieNeu-TTS truyền cảm">
+          </div>
+          <div class="form-group">
+            <label for="req-notes">Ghi chú dựng cảnh</label>
+            <textarea id="req-notes" rows="2" maxlength="2000" placeholder="VD: Nhấn mạnh đoạn điệp khúc, thêm SFX tiếng gõ cửa..."></textarea>
+          </div>
+        </div>
+      </details>
+
+      <div class="alert alert-error" id="create-error" style="display: none;"></div>
+      <div class="alert alert-success" id="create-success" style="display: none;"></div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-block btn-large" id="btn-submit-create">
+          <span class="btn-text-normal">Lưu kịch bản vào hàng đợi</span>
+          <span class="btn-text-loading" style="display: none;">Đang lưu...</span>
+        </button>
+      </div>
+      <p class="field-hint text-center">Khi máy dựng đang chạy, yêu cầu sẽ tự chuyển đến AI bạn chọn. Bạn có thể theo dõi tiến độ và duyệt video tại đây.</p>
+    </form>
+  </main>
+
+  <!-- Màn hình Chi tiết Yêu cầu -->
+  <main id="view-detail" class="view-container" style="display: none;">
+    <div class="detail-top-nav">
+      <a class="btn-back" id="btn-back-to-list" href="/studio" data-studio-link>← Quay lại danh sách</a>
+      <span class="detail-id-tag" id="detail-display-id">V000</span>
+    </div>
+
+    <div class="card detail-card">
+      <div class="detail-header">
+        <h2 class="detail-title" id="detail-title">Tiêu đề video</h2>
+        <div class="detail-badges">
+          <span class="badge" id="detail-skill-badge">Skill</span>
+          <span class="badge" id="detail-agent-badge">AI</span>
+          <span class="badge" id="detail-state-badge">Trạng thái</span>
+        </div>
+      </div>
+
+      <!-- Video Preview (nếu có Drive URL) -->
+      <div class="video-preview-wrapper" id="video-preview-section" style="display: none;">
+        <h3 class="subsection-title">Bản dựng xem trước</h3>
+        <div class="preview-aspect">
+          <iframe id="video-iframe" src="" allow="autoplay" allowfullscreen></iframe>
+        </div>
+        <div class="preview-actions">
+          <a id="btn-open-drive" class="btn btn-secondary btn-block" target="_blank" rel="noopener">Mở xem trên Google Drive</a>
+        </div>
+      </div>
+
+      <!-- Caption & Hashtags -->
+      <div class="detail-section" id="section-caption-edit">
+        <div class="label-row">
+          <h3 class="subsection-title">Tiêu đề đăng bài (Caption & Hashtags)</h3>
+          <button class="btn-text" id="btn-save-caption" style="display: none;">Lưu caption</button>
+        </div>
+        <div id="detail-caption-conflict" class="alert alert-warning" style="display: none; margin-bottom: 8px;">
+          <span id="detail-caption-conflict-message"></span>
+          <div style="margin-top: 6px; display: flex; gap: 8px;">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-caption-use-local">Dùng bản nháp máy này</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-caption-discard-local">Giữ bản máy chủ</button>
+          </div>
+        </div>
+        <textarea id="detail-caption-input" rows="4" maxlength="2200" placeholder="Chưa có caption..."></textarea>
+      </div>
+
+      <!-- Khung Duyệt & Đăng bài (Buffer Channels) -->
+      <div class="detail-section" id="section-publish" style="display: none;">
+        <h3 class="subsection-title" style="color: var(--primary-color, #10b981);">🚀 Duyệt & Đăng bài lên mạng xã hội</h3>
+        <p class="field-hint" style="margin-bottom: 12px;">Chọn các kênh bạn muốn xuất bản video:</p>
+        
+        <div class="channel-options">
+          <label class="channel-item">
+            <input type="checkbox" id="chk-chan-youtube" value="6a9a28c0065799be4684eacd" checked>
+            <span class="channel-info">
+              <strong>🔴 YouTube Shorts</strong> (manga illlya)
+            </span>
+          </label>
+          <label class="channel-item">
+            <input type="checkbox" id="chk-chan-tiktok" value="6ac376a86a5c39ccb61d85e4" checked>
+            <span class="channel-info">
+              <strong>⚫ TikTok</strong> (Triết Lý Sống Sâu)
+            </span>
+          </label>
+          <label class="channel-item">
+            <input type="checkbox" id="chk-chan-facebook" value="6a985567065799be4674ee3b" checked>
+            <span class="channel-info">
+              <strong>🔵 Facebook Reels</strong> (Cái đẹp là để ngắm)
+            </span>
+          </label>
+        </div>
+
+        <div class="form-group" style="margin-top: 14px;">
+          <label for="publish-schedule-time">Thời gian đăng (Để trống để đăng ngay):</label>
+          <input type="datetime-local" id="publish-schedule-time">
+          <p class="field-hint">Giờ Việt Nam (UTC+7)</p>
+        </div>
+
+        <button class="btn btn-primary btn-block btn-large" id="btn-submit-publish" type="button" style="margin-top: 14px; font-weight: bold; font-size: 1.05rem;">
+          <span class="btn-text-normal">🚀 XÁC NHẬN DUYỆT & ĐĂNG BÀI</span>
+          <span class="btn-text-loading" style="display: none;">Đang lưu lệnh xuất bản...</span>
+        </button>
+      </div>
+
+      <!-- Kịch bản & Nội dung (Thu gọn để dễ nhìn nút Đăng) -->
+      <details class="detail-section" style="cursor: pointer; margin-top: 14px; border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; padding: 10px;">
+        <summary class="subsection-title" style="user-select: none; margin-bottom: 0;">📄 Xem kịch bản gốc (Bấm để xem/ẩn)</summary>
+        <div class="script-box" id="detail-script-text" style="margin-top: 10px;"></div>
+      </details>
+
+      <!-- Danh sách biên nhận từng kênh -->
+      <div class="detail-section" id="section-receipts" style="display: none;">
+        <h3 class="subsection-title">Biên nhận xuất bản từng kênh</h3>
+        <p class="field-hint" id="receipts-select-hint">Tích các nền tảng muốn gửi. Các kênh chưa rõ kết quả sẽ được khóa để tránh đăng trùng.</p>
+        <div id="receipts-notice" class="banner-notice" style="display: none; margin-bottom: 12px; background: rgba(234, 88, 12, 0.15); border: 1px solid rgba(234, 88, 12, 0.4); color: #fb923c;"></div>
+        <div class="receipts-list" id="receipts-container"></div>
+        <button class="btn btn-warning btn-block" id="btn-retry-publish" type="button" style="display: none; margin-top: 14px; font-weight: bold; font-size: 1rem; background: #d97706; color: white;">
+          <span class="btn-text-normal">🔄 Gửi lại các kênh đã tích</span>
+          <span class="btn-text-loading" style="display: none;">Đang gửi lệnh thử lại...</span>
+        </button>
+      </div>
+
+      <!-- Tiến độ & Thao tác -->
+      <div class="detail-section" id="detail-actions-section">
+        <div class="banner-notice" id="detail-notice">
+          Đã lưu yêu cầu. Nhắn Codex xử lý khi sẵn sàng.
+        </div>
+        <button class="btn btn-danger btn-block" id="btn-cancel-req" style="display: none;">Hủy yêu cầu đang chờ</button>
+        <button class="btn btn-secondary btn-block" id="btn-retry-production" style="display: none; margin-top: 10px;">Thử dựng lại video</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Bottom Navigation Bar cho Mobile -->
+  <main id="view-system" class="view-container" style="display: none;">
+    <h2 class="view-title">Kết nối hệ thống</h2>
+    <p class="view-subtitle">Thông tin hệ thống chi tiết sẽ được bổ sung trong bước tiếp theo.</p>
+    <a class="btn btn-secondary" href="/studio" data-studio-link>Quay lại danh sách</a>
+  </main>
+
+  <main id="view-not-found" class="view-container" style="display: none;">
+    <h2 class="view-title">Không tìm thấy</h2>
+    <p class="view-subtitle">Đường dẫn hoặc video này không tồn tại.</p>
+    <a class="btn btn-secondary" href="/studio" data-studio-link>Quay lại danh sách</a>
+  </main>
+
+  <nav class="bottom-nav" id="bottom-nav" style="display: none;">
+    <a class="nav-item active" id="nav-btn-list" href="/studio" data-studio-link>
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">Nhật ký</span>
+    </a>
+    <a class="nav-item" id="nav-btn-create" href="/studio/new" data-studio-link>
+      <span class="nav-icon">➕</span>
+      <span class="nav-label">Tạo video</span>
+    </a>
+  </nav>
+
+  <script type="module" src="/app.js?v=3"></script>
+</body>
+</html>

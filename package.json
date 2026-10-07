@@ -1,0 +1,26 @@
+{
+  "name": "personal-zalo-video-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --max-old-space-size=4096 --test --test-concurrency=1 test/*.test.mjs",
+    "doctor": "node local/cli.mjs doctor",
+    "start": "node local/cli.mjs start",
+    "studio:start": "node local/studio-watcher.mjs",
+    "setup": "node local/cli.mjs setup",
+    "setup:imagegen": "node local/setup-gemini-key.mjs",
+    "connect:google": "node local/cli.mjs connect-google",
+    "cloud:configure": "node local/cli.mjs setup",
+    "cloud:dev": "wrangler dev --config cloud/wrangler.jsonc",
+    "cloud:deploy": "wrangler deploy --config cloud/wrangler.jsonc"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "miniflare": "5.20261001.0-alpha",
+    "wrangler": "4.147.0"
+  }
+}

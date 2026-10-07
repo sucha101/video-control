@@ -1,0 +1,14 @@
+{
+  "name": "zalo-video-control",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./web",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "durable_objects": {"bindings": [{"name": "VIDEO_QUEUE", "class_name": "VideoQueue"}]},
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["VideoQueue"]}]
+  // Set ZALO_WEBHOOK_SECRET, RUNNER_TOKEN, PAIR_CODE, ZALO_BOT_TOKEN and WEB_USERS_JSON using Wrangler secrets.
+}

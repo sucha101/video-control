@@ -29,7 +29,8 @@ export async function runStudioProductionCycle({config, studio, runAgentImpl = r
   }
 }
 
-async function produceStudioRequest({config, studio, claim, runAgentImpl, externalSignal}) {
+export async function produceStudioRequest({config, studio, claim, runAgentImpl, externalSignal}) {
+  const request = claim.request;
   const defaultProvider = request.skill === 'drama-mascot-video' ? 'antigravity' : 'codex';
   const provider = request.agent_provider || defaultProvider;
   const skillPath = config.skills?.[request.skill];

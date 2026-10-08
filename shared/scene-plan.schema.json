@@ -13,7 +13,8 @@
         "required": ["id", "prompt"],
         "properties": {
           "id": {"type": "integer", "minimum": 1, "maximum": 16},
-          "prompt": {"type": "string", "minLength": 1, "maxLength": 4000}
+          "prompt": {"type": "string", "minLength": 1, "maxLength": 4000},
+          "narration": {"type": "string", "maxLength": 1000}
         }
       }
     }

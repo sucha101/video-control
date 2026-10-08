@@ -15,10 +15,15 @@ export async function renderStoryVideo({
   await mkdir(publicTarget, {recursive: true});
 
   // 1. Đồng bộ assets sang public/video-bot/${displayId}/
-  const assetsAudio = path.join(jobDir, 'assets', 'audio');
   const targetAudio = path.join(publicTarget, 'audio');
   await mkdir(targetAudio, {recursive: true});
-  await cp(assetsAudio, targetAudio, {recursive: true});
+  const assetsAudioVo = path.join(jobDir, 'assets', 'audio', 'vo');
+  try {
+    await cp(assetsAudioVo, targetAudio, {recursive: true});
+  } catch {
+    const assetsAudio = path.join(jobDir, 'assets', 'audio');
+    await cp(assetsAudio, targetAudio, {recursive: true});
+  }
 
   const durationsSrc = path.join(jobDir, 'durations.json');
   const captionsSrc = path.join(jobDir, 'captions.json');
@@ -224,8 +229,8 @@ registerRoot(Root);
     'remotion', 'render',
     'src/video-bot-runner/index.tsx',
     'AutoVideo',
-    outputMp4,
-    `--browser-executable=${chromePath}`,
+    `"${outputMp4}"`,
+    `--browser-executable="${chromePath}"`,
     '--browser-timeout=120000',
     '--concurrency=1'
   ];
@@ -233,6 +238,7 @@ registerRoot(Root);
   return new Promise((resolve, reject) => {
     const child = spawn('npx.cmd', renderArgs, {
       cwd: remotionRoot,
+      shell: true,
       windowsHide: true,
       signal
     });

@@ -62,8 +62,7 @@ async function callAgent({jobDir, prompt, schemaPath, skillPath, config, agentPr
     args.push(prompt);
   } else {
     command = config.antigravityCommand || 'agy';
-    args = ['--print', prompt, '--output-format', 'json', '--json-schema', schemaPath,
-      '--print-timeout', '3h', '--sandbox', '--mode', 'accept-edits'];
+    args = ['-p', prompt, '--dangerously-skip-permissions', '--print-timeout', '15m'];
     for (const dir of commonDirs) args.push('--add-dir', dir);
   }
 
@@ -118,10 +117,6 @@ export async function runAgent({
   await mkdir(jobDir, {recursive: true});
   if (!['codex', 'antigravity'].includes(agentProvider)) throw new Error('AI được chọn không được hỗ trợ');
   const apiKey = config.secrets?.geminiApiKey;
-  if (!apiKey) return {
-    status: 'needs_input', videoPath: '', caption: title || 'Video', hashtags: [], qualityReportPath: '',
-    message: 'Chưa có Gemini API key để tạo ảnh tự động. Cấu hình khóa trong máy rồi bấm thử lại.'
-  };
 
   const scenePlanPrompt = [
     'Bạn là biên tập viên hình ảnh cho quy trình dựng video tự động.',

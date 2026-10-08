@@ -6,6 +6,7 @@ import {runAgent} from './codex.mjs';
 import {privateRoot} from './config.mjs';
 import {atomicJSON, readJSON, lock} from './manifest.mjs';
 import {sendZaloMessage} from './zalo-notify.mjs';
+import {runExecutionPipeline, extractScriptLines} from './execution-pipeline.mjs';
 
 export async function runStudioProductionCycle({config, studio, runAgentImpl = runAgent, signal}) {
   const release = await lock(path.join(privateRoot, 'studio-production.lock'));
@@ -29,8 +30,8 @@ export async function runStudioProductionCycle({config, studio, runAgentImpl = r
 }
 
 async function produceStudioRequest({config, studio, claim, runAgentImpl, externalSignal}) {
-  const request = claim.request;
-  const provider = request.agent_provider || 'codex';
+  const defaultProvider = request.skill === 'drama-mascot-video' ? 'antigravity' : 'codex';
+  const provider = request.agent_provider || defaultProvider;
   const skillPath = config.skills?.[request.skill];
   const jobDir = path.resolve(config.jobRoot, 'studio', request.display_id);
   const manifestFile = path.join(privateRoot, 'manifests', `${request.display_id}.json`);
@@ -68,12 +69,42 @@ async function produceStudioRequest({config, studio, claim, runAgentImpl, extern
   })();
 
   try {
-    if (!skillPath) throw new Error(`Không tìm thấy file SKILL cho: ${request.skill}`);
-    try { await sendZaloMessage(`🎬 Đang bắt đầu dựng ${request.display_id} bằng ${provider}.`); } catch {}
-    const result = await runAgentImpl({
-      jobDir, skillPath, script: request.script, title: request.title,
-      config, agentProvider: provider, signal: controller.signal
-    });
+    const scriptLines = extractScriptLines(request.script);
+    let referenceUrls = [];
+    try {
+      referenceUrls = Array.isArray(request.reference_urls) 
+        ? request.reference_urls 
+        : JSON.parse(request.reference_urls || '[]');
+    } catch {
+      referenceUrls = [];
+    }
+    const chosenVoice = request.voice || (request.skill === 'drama-mascot-video' ? 'kienthuc' : 'tinhtri');
+
+    let result;
+    if (scriptLines.length >= 4) {
+      console.log(`[Studio Producer] Kích hoạt Fast-Track tự động cho ${request.display_id} (${scriptLines.length} câu thoại).`);
+      try { await sendZaloMessage(`🎬 Đang chạy dựng tự động ${request.display_id} (${scriptLines.length} câu thoại)...`); } catch {}
+      result = await runExecutionPipeline({
+        jobDir,
+        displayId: request.display_id,
+        title: request.title,
+        script: request.script,
+        skill: request.skill,
+        voice: chosenVoice,
+        referenceUrls,
+        notes: request.notes,
+        config,
+        signal: controller.signal
+      });
+    } else {
+      if (!skillPath) throw new Error(`Không tìm thấy file SKILL cho: ${request.skill}`);
+      try { await sendZaloMessage(`🎬 Đang bắt đầu dựng ${request.display_id} bằng ${provider}.`); } catch {}
+      result = await runAgentImpl({
+        jobDir, skillPath, script: request.script, title: request.title,
+        voice: chosenVoice, referenceUrls, notes: request.notes,
+        config, agentProvider: provider, signal: controller.signal
+      });
+    }
     if (result.status === 'needs_input') throw new Error(result.message || 'AI cần thêm đầu vào');
     if (result.status !== 'ready_for_upload') throw new Error(result.message || `${provider} chưa hoàn tất video`);
 

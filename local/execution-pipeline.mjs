@@ -2,7 +2,7 @@ import path from 'node:path';
 import {writeFile, cp, mkdir, readdir} from 'node:fs/promises';
 import {runVieNeuTTS} from './vieneu-tts-runner.mjs';
 import {generateCaptions} from './caption-generator.mjs';
-import {renderStoryVideo} from './remotion-runner.mjs';
+import {renderStoryVideo, renderDramaMascotVideo} from './remotion-runner.mjs';
 import {generateSceneImages} from './gemini-imagegen.mjs';
 import {collectMediaForScenes} from './media-collector.mjs';
 import {loadCheckpoint, saveCheckpoint, isStepCompleted} from './checkpoint-manager.mjs';
@@ -183,15 +183,33 @@ export async function runExecutionPipeline({
     console.log(`[Pipeline] Đã có file MP4 từ checkpoint trước cho ${displayId}. Bỏ qua render.`);
     renderResult = {videoPath: path.join(jobDir, `${displayId}.mp4`), displayId};
   } else {
-    console.log(`[Pipeline] Đang kích hoạt Remotion render cho ${displayId}...`);
-    renderResult = await renderStoryVideo({
-      jobDir,
-      displayId,
-      title,
-      remotionRoot: config.resourceRoot || 'D:/remotion',
-      signal,
-      onProgress
-    });
+    console.log(`[Pipeline] Đang kích hoạt Remotion render cho ${displayId} (Skill: ${skill})...`);
+    if (skill === 'drama-mascot-video') {
+      let scenePlan = null;
+      try {
+        const planText = await (await import('node:fs/promises')).readFile(path.join(jobDir, 'scene-plan.json'), 'utf8');
+        scenePlan = JSON.parse(planText);
+      } catch {}
+
+      renderResult = await renderDramaMascotVideo({
+        jobDir,
+        displayId,
+        title,
+        scenePlan,
+        remotionRoot: config.resourceRoot || 'D:/remotion',
+        signal,
+        onProgress
+      });
+    } else {
+      renderResult = await renderStoryVideo({
+        jobDir,
+        displayId,
+        title,
+        remotionRoot: config.resourceRoot || 'D:/remotion',
+        signal,
+        onProgress
+      });
+    }
     console.log(`[Pipeline] Render thành công! Video: ${renderResult.videoPath}`);
     await saveCheckpoint(jobDir, 'rendered', {requestId, inputRevision, videoPath: renderResult.videoPath});
   }

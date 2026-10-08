@@ -41,13 +41,16 @@ export function extractScriptLines(scriptText) {
     }
   }
 
-  return voLines.slice(0, 16);
+  // Số cảnh co giãn linh hoạt theo kịch bản (tối đa 30)
+  return voLines.slice(0, 30);
 }
 
 /**
- * Pipeline thực thi tự động chuẩn SOP Vxxx (Hỗ trợ Checkpoint & Phục hồi lỗi)
+ * Pipeline thực thi tự động chuẩn SOP Vxxx (Idempotent + Revision-aware)
  */
 export async function runExecutionPipeline({
+  requestId,
+  inputRevision,
   jobDir,
   displayId,
   title,
@@ -66,9 +69,9 @@ export async function runExecutionPipeline({
   await mkdir(audioDir, {recursive: true});
   await mkdir(scenesDir, {recursive: true});
 
-  // Tải trạng thái Checkpoint trước đó (nếu có)
-  const checkpoint = await loadCheckpoint(jobDir);
-  console.log(`[Pipeline] Bắt đầu xử lý ${displayId} (Checkpoint hiện tại: ${checkpoint.step})`);
+  // Tải Checkpoint gắn với requestId và inputRevision
+  const checkpoint = await loadCheckpoint(jobDir, {requestId, inputRevision});
+  console.log(`[Pipeline] Xử lý ${displayId} (Revision: ${inputRevision || 1}, Checkpoint: ${checkpoint.step})`);
 
   // 1. Phân tích kịch bản
   let lines = extractScriptLines(script);
@@ -77,12 +80,12 @@ export async function runExecutionPipeline({
   }
 
   console.log(`[Pipeline] Đã trích xuất ${lines.length} câu thoại cho ${displayId}.`);
-  await saveCheckpoint(jobDir, 'script_ready', {linesCount: lines.length});
+  await saveCheckpoint(jobDir, 'script_ready', {requestId, inputRevision, linesCount: lines.length});
 
-  // 2. Chạy VieNeu-TTS (nếu chưa hoàn tất)
+  // 2. Chạy VieNeu-TTS
   let durations;
   if (isStepCompleted(checkpoint, 'tts_done')) {
-    console.log(`[Pipeline] Đã có TTS từ checkpoint trước cho ${displayId}. Bỏ qua bước sinh âm thanh.`);
+    console.log(`[Pipeline] Đã có TTS từ checkpoint hợp lệ cho ${displayId}. Bỏ qua bước sinh âm thanh.`);
     const rawDurations = await (await import('node:fs/promises')).readFile(path.join(jobDir, 'durations.json'), 'utf8');
     durations = JSON.parse(rawDurations);
   } else {
@@ -97,7 +100,7 @@ export async function runExecutionPipeline({
     });
     durations = ttsResult.durations;
     await writeFile(path.join(jobDir, 'durations.json'), JSON.stringify(durations, null, 2), 'utf8');
-    await saveCheckpoint(jobDir, 'tts_done', {durations});
+    await saveCheckpoint(jobDir, 'tts_done', {requestId, inputRevision, durations});
   }
 
   // 3. Tạo captions.json
@@ -105,21 +108,31 @@ export async function runExecutionPipeline({
   const captions = generateCaptions({lines, durations});
   await writeFile(path.join(jobDir, 'captions.json'), JSON.stringify(captions, null, 2), 'utf8');
 
-  // 4. Thu thập & chuẩn bị hình ảnh/tư liệu
+  // 4. Thu thập & kiểm định tư liệu hình ảnh
   if (!isStepCompleted(checkpoint, 'media_collected')) {
     console.log('[Pipeline] Đang thu thập và kiểm định tư liệu hình ảnh...');
 
     if (skill === 'drama-mascot-video') {
-      // Nhánh Drama: Thu thập tư liệu thật từ referenceUrls
+      // Yêu cầu tư liệu thật cho Drama, không tự ý fake
       const mediaResult = await collectMediaForScenes({
         scenes: lines.map((_, idx) => ({id: idx + 1})),
         referenceUrls,
         outputDir: scenesDir,
-        fallbackSeedDir: 'D:/remotion/assets/stickman-seed'
+        requireRealEvidence: referenceUrls.length > 0
       });
+
+      if (!mediaResult.isComplete && referenceUrls.length > 0) {
+        return {
+          status: 'needs_input',
+          message: mediaResult.message,
+          videoPath: '',
+          caption: title,
+          hashtags: []
+        };
+      }
       console.log(`[Pipeline] Đã thu thập tư liệu Drama: ${mediaResult.total}/${lines.length} cảnh.`);
     } else {
-      // Nhánh Story: Dùng API sinh ảnh hoặc kho phôi Stickman Seed
+      // Nhánh Story: Dùng API hoặc kho phôi Stickman Seed
       const existingScenes = await readdir(scenesDir).catch(() => []);
       const hasImages = existingScenes.filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f)).length >= lines.length;
 
@@ -161,7 +174,7 @@ export async function runExecutionPipeline({
         }
       }
     }
-    await saveCheckpoint(jobDir, 'media_collected');
+    await saveCheckpoint(jobDir, 'media_collected', {requestId, inputRevision});
   }
 
   // 5. Render Remotion
@@ -180,10 +193,10 @@ export async function runExecutionPipeline({
       onProgress
     });
     console.log(`[Pipeline] Render thành công! Video: ${renderResult.videoPath}`);
-    await saveCheckpoint(jobDir, 'rendered', {videoPath: renderResult.videoPath});
+    await saveCheckpoint(jobDir, 'rendered', {requestId, inputRevision, videoPath: renderResult.videoPath});
   }
 
-  // 6. Caption & Hashtags phù hợp từng skill
+  // 6. Caption & Hashtags phù hợp
   let caption = `${title}. Thấu hiểu quy luật cuộc sống để tâm luôn bình an và tỉnh táo vững bước! #thuctinh #trietly #baihoccuocsong #phattrienbanthan`;
   let hashtags = ['#thuctinh', '#trietly', '#baihoccuocsong', '#phattrienbanthan', '#tiktokvietnam'];
 
@@ -192,7 +205,7 @@ export async function runExecutionPipeline({
     hashtags = ['#drama', '#tintuc', '#bantin', '#xuhuong', '#tiktokvietnam'];
   }
 
-  await saveCheckpoint(jobDir, 'completed', {videoPath: renderResult.videoPath});
+  await saveCheckpoint(jobDir, 'completed', {requestId, inputRevision, videoPath: renderResult.videoPath});
 
   return {
     status: 'ready_for_upload',

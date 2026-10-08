@@ -85,6 +85,8 @@ async function produceStudioRequest({config, studio, claim, runAgentImpl, extern
       console.log(`[Studio Producer] Kích hoạt Fast-Track tự động cho ${request.display_id} (${scriptLines.length} câu thoại).`);
       try { await sendZaloMessage(`🎬 Đang chạy dựng tự động ${request.display_id} (${scriptLines.length} câu thoại)...`); } catch {}
       result = await runExecutionPipeline({
+        requestId: request.id,
+        inputRevision: request.input_revision,
         jobDir,
         displayId: request.display_id,
         title: request.title,

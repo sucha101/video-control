@@ -32,7 +32,7 @@ async function downloadDirectMedia(url, outputPath) {
 }
 
 /**
- * Trích xuất đoạn video ngắn (3-5s) từ video gốc bằng ffmpeg
+ * Trích xuất đoạn video ngắn từ video gốc bằng ffmpeg
  */
 export async function trimVideoClip({inputPath, outputPath, startSec = 0, durationSec = 4}) {
   return new Promise((resolve, reject) => {
@@ -65,19 +65,20 @@ export async function collectMediaForScenes({
   scenes,
   referenceUrls = [],
   outputDir,
+  requireRealEvidence = false,
   fallbackSeedDir = 'D:/remotion/assets/stickman-seed'
 }) {
   await mkdir(outputDir, {recursive: true});
   const collectedAssets = [];
+  const missingScenes = [];
 
   console.log(`[Media Collector] Đang thu thập tư liệu cho ${scenes.length} cảnh từ ${referenceUrls.length} nguồn...`);
 
-  // Duyệt qua từng cảnh
   for (let i = 0; i < scenes.length; i++) {
     const sceneNum = i + 1;
     const targetFile = path.join(outputDir, `scene_${String(sceneNum).padStart(2, '0')}.png`);
 
-    // 1. Nếu đã có file sẵn trong thư mục, giữ lại
+    // 1. Nếu đã có file sẵn trong thư mục
     if (await fileExists(targetFile)) {
       collectedAssets.push({scene: sceneNum, path: targetFile, source: 'existing'});
       continue;
@@ -85,7 +86,7 @@ export async function collectMediaForScenes({
 
     let resolved = false;
 
-    // 2. Thử tải từ referenceUrls nếu có URL trực tiếp ảnh/video
+    // 2. Tải từ referenceUrls
     if (referenceUrls[i] && /^https?:\/\/.+/i.test(referenceUrls[i])) {
       const url = referenceUrls[i];
       try {
@@ -94,29 +95,39 @@ export async function collectMediaForScenes({
         collectedAssets.push({scene: sceneNum, path: targetFile, source: 'downloaded'});
         resolved = true;
       } catch (err) {
-        console.warn(`[Media Collector] Không tải được URL cảnh ${sceneNum} (${err.message}). Kích hoạt fallback.`);
+        console.warn(`[Media Collector] Không tải được URL cảnh ${sceneNum} (${err.message}).`);
       }
     }
 
-    // 3. Fallback: Nếu không tải được hoặc không có link, dùng kho phôi seed chuẩn
+    // 3. Xử lý khi thiếu tư liệu
     if (!resolved) {
-      const seedFile = path.join(fallbackSeedDir, `scene_${String(sceneNum).padStart(2, '0')}.png`);
-      if (await fileExists(seedFile)) {
-        const {copyFile} = await import('node:fs/promises');
-        await copyFile(seedFile, targetFile);
-        collectedAssets.push({scene: sceneNum, path: targetFile, source: 'fallback_seed'});
-        resolved = true;
+      if (requireRealEvidence) {
+        // Với Drama: Không tự tiện fake bằng chứng nếu yêu cầu tư liệu thật
+        missingScenes.push(sceneNum);
+      } else {
+        // Với Story: Dùng ảnh phôi minh họa chuẩn
+        const seedFile = path.join(fallbackSeedDir, `scene_${String(sceneNum).padStart(2, '0')}.png`);
+        if (await fileExists(seedFile)) {
+          const {copyFile} = await import('node:fs/promises');
+          await copyFile(seedFile, targetFile);
+          collectedAssets.push({scene: sceneNum, path: targetFile, source: 'fallback_seed'});
+          resolved = true;
+        } else {
+          missingScenes.push(sceneNum);
+        }
       }
-    }
-
-    if (!resolved) {
-      console.warn(`[Media Collector] Cảnh ${sceneNum} chưa có hình ảnh/clip, cần bổ sung.`);
     }
   }
 
+  const isComplete = missingScenes.length === 0;
+
   return {
     collectedAssets,
+    missingScenes,
     total: collectedAssets.length,
-    isComplete: collectedAssets.length >= scenes.length
+    isComplete,
+    message: isComplete 
+      ? 'Đã thu thập đủ tư liệu cho tất cả các cảnh'
+      : `Thiếu tư liệu thật cho các cảnh: ${missingScenes.join(', ')}. Cần bổ sung nguồn tham khảo.`
   };
 }

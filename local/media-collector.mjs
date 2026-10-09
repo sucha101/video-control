@@ -32,28 +32,22 @@ async function downloadDirectMedia(url, outputPath) {
 }
 
 /**
- * Trích xuất đoạn video ngắn từ video gốc bằng ffmpeg
+ * Thu thập bằng chứng thật bằng Python Playwright + Bing Images
  */
-export async function trimVideoClip({inputPath, outputPath, startSec = 0, durationSec = 4}) {
-  return new Promise((resolve, reject) => {
-    const args = [
-      '-y',
-      '-ss', String(startSec),
-      '-i', inputPath,
-      '-t', String(durationSec),
-      '-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black',
-      '-c:v', 'libx264',
-      '-preset', 'fast',
-      '-an',
-      outputPath
-    ];
-
-    const proc = spawn('ffmpeg', args, {windowsHide: true});
-    let stderr = '';
-    proc.stderr?.on('data', d => stderr += d.toString());
+async function runPythonEvidenceCollector(jobDir, referenceUrls = []) {
+  const scriptPath = path.resolve('local/media_evidence_collector.py');
+  return new Promise((resolve) => {
+    const args = [scriptPath, jobDir];
+    const proc = spawn('python', args, {
+      windowsHide: true,
+      env: {...process.env, PYTHONIOENCODING: 'utf-8'}
+    });
+    let output = '';
+    proc.stdout?.on('data', d => output += d.toString());
+    proc.stderr?.on('data', d => output += d.toString());
     proc.on('close', code => {
-      if (code === 0) resolve(outputPath);
-      else reject(new Error(`FFmpeg trim clip lỗi (${code}): ${stderr}`));
+      console.log(`[Python Evidence Collector] Kết thúc (code ${code}):\n${output}`);
+      resolve(code === 0);
     });
   });
 }
@@ -65,6 +59,7 @@ export async function collectMediaForScenes({
   scenes,
   referenceUrls = [],
   outputDir,
+  jobDir,
   requireRealEvidence = false,
   fallbackSeedDir = 'D:/remotion/assets/stickman-seed'
 }) {
@@ -73,6 +68,12 @@ export async function collectMediaForScenes({
   const missingScenes = [];
 
   console.log(`[Media Collector] Đang thu thập tư liệu cho ${scenes.length} cảnh từ ${referenceUrls.length} nguồn...`);
+
+  // Với Drama: Sử dụng Python Playwright & CDN Extractor để lấy ảnh thật từ link bài viết / Web
+  if (requireRealEvidence && jobDir) {
+    console.log('[Media Collector] Kích hoạt chế độ thu thập bằng chứng thật (Playwright + Web Evidence)...');
+    await runPythonEvidenceCollector(jobDir, referenceUrls);
+  }
 
   for (let i = 0; i < scenes.length; i++) {
     const sceneNum = i + 1;
@@ -86,8 +87,8 @@ export async function collectMediaForScenes({
 
     let resolved = false;
 
-    // 2. Tải từ referenceUrls
-    if (referenceUrls[i] && /^https?:\/\/.+/i.test(referenceUrls[i])) {
+    // 2. Tải từ referenceUrls nếu là file ảnh trực tiếp
+    if (referenceUrls[i] && /^https?:\/\/.+\.(png|jpg|jpeg|webp)$/i.test(referenceUrls[i])) {
       const url = referenceUrls[i];
       try {
         console.log(`[Media Collector] Đang tải tư liệu cảnh ${sceneNum} từ: ${url}`);
@@ -102,10 +103,11 @@ export async function collectMediaForScenes({
     // 3. Xử lý khi thiếu tư liệu
     if (!resolved) {
       if (requireRealEvidence) {
-        // Với Drama: Không tự tiện fake bằng chứng nếu yêu cầu tư liệu thật
+        // Tuyệt đối KHÔNG bao giờ dùng ảnh stickman cho Drama
+        console.warn(`[Media Collector] Cảnh ${sceneNum} chưa có tư liệu thật.`);
         missingScenes.push(sceneNum);
       } else {
-        // Với Story: Dùng ảnh phôi minh họa chuẩn
+        // Chỉ dùng phôi Stickman cho Story đạo lý/tâm lý
         const seedFile = path.join(fallbackSeedDir, `scene_${String(sceneNum).padStart(2, '0')}.png`);
         if (await fileExists(seedFile)) {
           const {copyFile} = await import('node:fs/promises');

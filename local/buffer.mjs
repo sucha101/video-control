@@ -226,11 +226,16 @@ export async function getBufferPost({apiKey, postId, fetchImpl = fetch, budget =
   if (!postId) throw new Error('Thiếu postId');
 
   const query = `
-    query GetPost($id: ID!) {
-      post(id: $id) {
+    query GetPost($id: PostId!) {
+      post(input: { id: $id }) {
         id
         status
+        dueAt
+        sentAt
         externalLink
+        error {
+          message
+        }
       }
     }
   `;
@@ -245,6 +250,9 @@ export async function getBufferPost({apiKey, postId, fetchImpl = fetch, budget =
   return {
     id: post.id,
     status: post.status,
-    externalLink: post.externalLink || null
+    dueAt: post.dueAt,
+    sentAt: post.sentAt,
+    externalLink: post.externalLink || null,
+    errorMessage: post.error?.message || null
   };
 }
